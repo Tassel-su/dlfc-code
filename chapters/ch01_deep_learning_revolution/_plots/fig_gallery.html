@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>dlfc-code 图集 — 第 1 章 多项式曲线拟合</title>
+<style>
+  body { font-family: "Segoe UI", "Microsoft YaHei", sans-serif; background: #f5f6f8; margin: 0; padding: 24px; }
+  h1 { color: #1a1a2e; font-size: 24px; }
+  .card { background: #fff; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,.08);
+          margin: 18px auto; max-width: 860px; padding: 18px 22px; }
+  .card h2 { color: #0f4c81; font-size: 17px; margin: 0 0 6px 0; }
+  .card p { color: #444; font-size: 14px; line-height: 1.6; margin: 4px 0 10px 0; }
+  .card img { width: 100%; border: 1px solid #e0e0e0; border-radius: 6px; }
+  .key { background: #fff8e1; border-left: 4px solid #f9a825; padding: 8px 12px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<h1>📊 第 1 章《深度学习革命》图集 — 多项式曲线拟合</h1>
+<p>对应《Deep Learning: Foundations and Concepts》1.2–1.3 节（PDF p.4–14）。每张图下方有"看什么"提示。</p>
+
+<div class="card">
+  <h2>图 1｜训练数据与真实函数</h2>
+  <img src="fig1_sin_data.png" alt="fig1">
+  <p class="key">看什么：10 个黑点是带噪观测 t = sin(2πx) + ε；蓝线是我们要逼近的真实函数。
+  我们只能看到黑点，目标是"猜出"蓝线。</p>
+</div>
+
+<div class="card">
+  <h2>图 2｜不同阶数的拟合（欠拟合 vs 过拟合）</h2>
+  <img src="fig2_poly_fits.png" alt="fig2">
+  <p class="key">看什么：M=0 是水平线（欠拟合，完全没抓住形状）；M=1 是直线；M=3 已经很贴近真实函数；
+  M=9 疯狂振荡穿过所有点——它记住了噪声，而不是学到了规律。</p>
+</div>
+
+<div class="card">
+  <h2>图 3｜训练/测试 RMS 随 M 变化（U 形曲线）</h2>
+  <img src="fig3_rms_vs_M.png" alt="fig3">
+  <p class="key">看什么：橙线（测试 RMS）先降后升的 U 形就是"泛化误差"曲线，最低点附近是最优复杂度。
+  蓝线（训练 RMS）一路下降——训练误差低不代表模型好。</p>
+</div>
+
+<div class="card">
+  <h2>图 4｜L2 正则化对 M=9 的抑制</h2>
+  <img src="fig4_regularization.png" alt="fig4">
+  <p class="key">看什么：无正则（绿线）振荡剧烈；lnλ=-18（红线）被拉回平滑；
+  lnλ=0（黄线）过度平滑。正则化强度 λ 是个需要调的天平。</p>
+</div>
+
+<div class="card">
+  <h2>图 5｜留一法（LOO）模型选择</h2>
+  <img src="fig5_loo.png" alt="fig5">
+  <p class="key">看什么：LOO 误差在 M=3 处最低——不碰测试集就选出了最优阶数，与书中结论一致。
+  对比图 3 里"测试集最优 M=5"，体会为什么模型选择不能用测试集。</p>
+</div>
+
+</body>
+</html>
