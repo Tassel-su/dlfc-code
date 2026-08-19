@@ -226,6 +226,102 @@ def rms_error(t_true: np.ndarray, y_pred: np.ndarray) -> float:
 
 
 # ---------------------------------------------------------------------------
+# 6. 概率与信息论工具（第 2-3 章共用）
+# ---------------------------------------------------------------------------
+def gaussian_pdf(x, mu: float = 0.0, sigma2: float = 1.0) -> np.ndarray:
+    """一维高斯概率密度（书中 2.3 节）。
+
+    p(x) = 1/sqrt(2πσ²) * exp( -(x-mu)² / (2σ²) )
+    """
+    x = np.asarray(x, dtype=float)
+    return np.exp(-0.5 * (x - mu) ** 2 / sigma2) / np.sqrt(2 * np.pi * sigma2)
+
+
+def multivariate_gaussian_pdf(x, mu, Sigma) -> float:
+    """多维高斯概率密度（书中 2.4 节）。
+
+    p(x) = (2π)^(-D/2) |Σ|^(-1/2) exp( -½ (x-mu)ᵀ Σ⁻¹ (x-mu) )
+    用 cholesky/solve 保证数值稳定。
+    """
+    x = np.asarray(x, dtype=float)
+    mu = np.asarray(mu, dtype=float)
+    Sigma = np.asarray(Sigma, dtype=float)
+    D = mu.size
+    diff = x - mu
+    L = np.linalg.cholesky(Sigma)
+    maha = float(diff @ np.linalg.solve(Sigma, diff))
+    logdet = 2.0 * float(np.sum(np.log(np.diag(L))))
+    return float(np.exp(-0.5 * (maha + D * np.log(2 * np.pi) + logdet)))
+
+
+def entropy(p: np.ndarray, unit: str = "nats") -> float:
+    """离散熵 H(p) = -Σ p_i ln p_i（书中 2.5.1 节）。
+
+    输入必须是合法概率分布（非负、和为 1）。unit='bits' 时以 2 为底。
+    """
+    p = np.asarray(p, dtype=float)
+    assert np.all(p >= 0) and abs(p.sum() - 1.0) < 1e-9, "p 必须是合法概率分布"
+    p = p[p > 0]  # 0 ln 0 = 0
+    base = 2.0 if unit == "bits" else np.e
+    return float(-np.sum(p * np.log(p)) / np.log(base))
+
+
+def kl_divergence(p: np.ndarray, q: np.ndarray) -> float:
+    """KL 散度 KL(p||q) = Σ p_i ln(p_i / q_i)（书中 2.5.5 节）。
+
+    性质：KL >= 0，等号当且仅当 p == q；不对称（KL(p||q) != KL(q||p)）。
+    """
+    p = np.asarray(p, dtype=float)
+    q = np.asarray(q, dtype=float)
+    assert p.shape == q.shape and np.all(p > 0) and np.all(q > 0), "需要严格正的概率向量"
+    return float(np.sum(p * (np.log(p) - np.log(q))))
+
+
+def mutual_information(joint: np.ndarray) -> float:
+    """互信息 I(X;Y)（书中 2.5.7 节），输入联合分布矩阵 joint[i,j] = p(X=i, Y=j)。
+
+    I(X;Y) = ΣΣ p(x,y) ln( p(x,y) / (p(x)p(y)) ) = H(X) + H(Y) - H(X,Y)
+    """
+    joint = np.asarray(joint, dtype=float)
+    assert joint.ndim == 2 and np.all(joint > 0) and abs(joint.sum() - 1.0) < 1e-9
+    px = joint.sum(axis=1)
+    py = joint.sum(axis=0)
+    outer = np.outer(px, py)
+    return float(np.sum(joint * (np.log(joint) - np.log(outer))))
+
+
+# ---- 第 3 章的离散分布 ----
+def bernoulli_pmf(x, mu: float) -> float:
+    """伯努利分布 p(x|mu) = mu^x (1-mu)^(1-x)，x ∈ {0,1}（书中 3.1 节）。"""
+    assert 0 <= mu <= 1
+    return float((mu ** x) * ((1.0 - mu) ** (1 - x)))
+
+
+def binomial_pmf(k, n: int, mu: float) -> float:
+    """二项分布 Bin(k|n,mu) = C(n,k) mu^k (1-mu)^(n-k)（书中 3.1 节）。"""
+    from math import comb
+    return float(comb(n, k) * (mu ** k) * ((1.0 - mu) ** (n - k)))
+
+
+def multinomial_pmf(counts, probs) -> float:
+    """多项分布 Mult(n1..nK | mu1..muK)（书中 3.1 节）。
+
+    counts/probs 为等长数组；阶乘用 math.factorial 计算。
+    """
+    import math
+    counts = np.asarray(counts, dtype=int)
+    probs = np.asarray(probs, dtype=float)
+    assert counts.ndim == 1 and counts.size == probs.size
+    assert np.all(counts >= 0) and abs(probs.sum() - 1.0) < 1e-9
+    n = int(counts.sum())
+    coef = math.factorial(n)
+    for c in counts:
+        coef //= math.factorial(int(c))
+    return float(coef * np.prod(probs ** counts))
+
+
+
+# ---------------------------------------------------------------------------
 # 3. 多项式基函数与最小二乘（第 1 章 / 第 4 章共用）
 # ---------------------------------------------------------------------------
 def poly_design_matrix(x: np.ndarray, M: int) -> np.ndarray:
