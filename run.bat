@@ -5,8 +5,12 @@ REM  用法: run.bat            -> 运行第 1 章
 REM        run.bat ch05       -> 运行第 5 章（按文件名前缀匹配）
 REM ============================================================
 setlocal
-set PY=C:\Python314\python.exe
 set ROOT=%~dp0
+
+REM 优先用 PATH 里的 python，找不到再退回 C:\Python314
+set PY=python
+%PY% --version >nul 2>&1
+if errorlevel 1 set PY=C:\Python314\python.exe
 
 if "%~1"=="" (
     set TARGET=ch01

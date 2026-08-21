@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>dlfc-code 全书图集 — Deep Learning: Foundations and Concepts 代码化</title>
+<style>
+  body { font-family: "Segoe UI", "Microsoft YaHei", sans-serif; background: #f5f6f8; margin: 0; padding: 24px; }
+  h1 { color: #1a1a2e; }
+  .ch { background: #fff; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,.08); margin: 18px auto; max-width: 900px; padding: 18px 22px; }
+  .ch h2 { color: #0f4c81; font-size: 17px; margin: 0 0 4px 0; }
+  .ch p { color: #666; font-size: 13px; margin: 2px 0 10px 0; }
+  img { width: 100%; border: 1px solid #e0e0e0; border-radius: 6px; margin-top: 8px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+</style>
+</head>
+<body>
+<h1>📚 dlfc-code：把《Deep Learning: Foundations and Concepts》逐章变成代码</h1>
+<p>纯 numpy 从零实现 · 20 章 · 5000+ 行代码 · 67 张图 · 每章带数值验证与自测题</p>
+
+<div class="ch"><h2>Ch1 深度学习革命 · 多项式曲线拟合</h2>
+<p>欠拟合/过拟合/L2正则/LOO模型选择</p><div class="grid">
+<img src="chapters/ch01_deep_learning_revolution/_plots/fig2_poly_fits.png">
+<img src="chapters/ch01_deep_learning_revolution/_plots/fig3_rms_vs_M.png">
+<img src="chapters/ch01_deep_learning_revolution/_plots/fig4_regularization.png">
+</div></div>
+
+<div class="ch"><h2>Ch2 概率论</h2>
+<p>贝叶斯医学筛查 · 熵/KL/互信息 · beta后验</p><div class="grid">
+<img src="chapters/ch02_probabilities/_plots/fig1_coin_frequency.png">
+<img src="chapters/ch02_probabilities/_plots/fig3_gaussian_pdf.png">
+<img src="chapters/ch02_probabilities/_plots/fig8_beta_posterior.png">
+</div></div>
+
+<div class="ch"><h2>Ch3 标准分布</h2>
+<p>二项分布 · 高斯混合 · von Mises · 核密度</p><div class="grid">
+<img src="chapters/ch03_standard_distributions/_plots/fig1_binomial.png">
+<img src="chapters/ch03_standard_distributions/_plots/fig2_gaussian_mixture.png">
+<img src="chapters/ch03_standard_distributions/_plots/fig3_von_mises.png">
+<img src="chapters/ch03_standard_distributions/_plots/fig5_kde.png">
+</div></div>
+
+<div class="ch"><h2>Ch4 单层回归</h2>
+<p>偏差-方差权衡 · 顺序学习 · 高方差拟合</p><div class="grid">
+<img src="chapters/ch04_single_layer_regression/_plots/fig6_bias_variance.png">
+<img src="chapters/ch04_single_layer_regression/_plots/fig7_high_variance.png">
+<img src="chapters/ch04_single_layer_regression/_plots/fig5_decision_theory.png">
+</div></div>
+
+<div class="ch"><h2>Ch5 单层分类</h2>
+<p>ROC曲线 · 逻辑回归边界 · Softmax三分类</p><div class="grid">
+<img src="chapters/ch05_single_layer_classification/_plots/fig1_roc.png">
+<img src="chapters/ch05_single_layer_classification/_plots/fig3_logistic.png">
+<img src="chapters/ch05_single_layer_classification/_plots/fig5_softmax.png">
+</div></div>
+
+<div class="ch"><h2>Ch6 深度网络</h2>
+<p>万能逼近 · 激活函数 · MDN多模态</p><div class="grid">
+<img src="chapters/ch06_deep_neural_networks/_plots/fig3_universal_approximation.png">
+<img src="chapters/ch06_deep_neural_networks/_plots/fig2_relu_derivative.png">
+<img src="chapters/ch06_deep_neural_networks/_plots/fig4_mdn_motivation.png">
+</div></div>
+
+<div class="ch"><h2>Ch7 梯度下降</h2>
+<p>优化器对比 · 学习率调度 · 归一化效果</p><div class="grid">
+<img src="chapters/ch07_gradient_descent/_plots/fig3_optimizers.png">
+<img src="chapters/ch07_gradient_descent/_plots/fig4_lr_schedule.png">
+<img src="chapters/ch07_gradient_descent/_plots/fig5_normalization.png">
+</div></div>
+
+<div class="ch"><h2>Ch8 反向传播 · 自研 autograd</h2>
+<p>迷你自动微分引擎 · 手推与自动微分一致</p><p>（核心代码：autograd.py，150 行）</p></div>
+
+<div class="ch"><h2>Ch9 正则化</h2>
+<p>双重下降 · 模型平均 · 学习曲线</p><div class="grid">
+<img src="chapters/ch09_regularization/_plots/fig3_double_descent.png">
+<img src="chapters/ch09_regularization/_plots/fig4_model_averaging.png">
+<img src="chapters/ch09_regularization/_plots/fig2_learning_curves.png">
+</div></div>
+
+<div class="ch"><h2>Ch10 卷积网络</h2>
+<p>纯 numpy CNN（MNIST 精度 0.818）· 显著性图</p><div class="grid">
+<img src="chapters/ch10_convolutional_networks/_plots/fig2_saliency.png">
+<img src="chapters/ch10_convolutional_networks/_plots/fig1_sobel.png">
+</div></div>
+
+<div class="ch"><h2>Ch11 结构化分布</h2>
+<p>图模型 · 朴素贝叶斯（MNIST 精度 0.990）· HMM 前向算法</p></div>
+
+<div class="ch"><h2>Ch12 Transformer</h2>
+<p>位置编码 · 微型语言模型训练生成</p><div class="grid">
+<img src="chapters/ch12_transformer/_plots/fig1_positional_encoding.png">
+</div></div>
+
+<div class="ch"><h2>Ch13 图网络</h2>
+<p>GCN 半监督节点分类（精度 1.000）· 过平滑</p><div class="grid">
+<img src="chapters/ch13_graph_networks/_plots/fig1_graph.png">
+</div></div>
+
+<div class="ch"><h2>Ch14 采样</h2>
+<p>拒绝采样 · Metropolis-Hastings · Gibbs · Langevin 双井</p><div class="grid">
+<img src="chapters/ch14_sampling/_plots/fig2_metropolis.png">
+<img src="chapters/ch14_sampling/_plots/fig4_langevin.png">
+<img src="chapters/ch14_sampling/_plots/fig3_gibbs.png">
+</div></div>
+
+<div class="ch"><h2>Ch15 离散潜变量</h2>
+<p>K-means · GMM/EM · ELBO 单调上升</p><div class="grid">
+<img src="chapters/ch15_discrete_latent/_plots/fig2_elbo.png">
+<img src="chapters/ch15_discrete_latent/_plots/fig1_kmeans.png">
+</div></div>
+
+<div class="ch"><h2>Ch16 连续潜变量</h2>
+<p>MNIST PCA 2D · PPCA 与 PCA 一致</p><div class="grid">
+<img src="chapters/ch16_continuous_latent/_plots/fig2_mnist_pca.png">
+<img src="chapters/ch16_continuous_latent/_plots/fig1_pca.png">
+</div></div>
+
+<div class="ch"><h2>Ch17 GAN</h2>
+<p>2D 对抗训练：生成 4 团高斯（覆盖率 0.846）</p><div class="grid">
+<img src="chapters/ch17_generative_adversarial_networks/_plots/fig1_gan_result.png">
+</div></div>
+
+<div class="ch"><h2>Ch18 标准化流</h2>
+<p>耦合层 · 精确密度 · Neural ODE 轨迹</p><div class="grid">
+<img src="chapters/ch18_normalizing_flows/_plots/fig1_coupling_flow.png">
+<img src="chapters/ch18_normalizing_flows/_plots/fig2_neural_ode.png">
+</div></div>
+
+<div class="ch"><h2>Ch19 自编码器与 VAE</h2>
+<p>线性 AE=PCA · VAE 生成 8 高斯</p><div class="grid">
+<img src="chapters/ch19_autoencoders/_plots/fig1_vae_generation.png">
+</div></div>
+
+<div class="ch"><h2>Ch20 扩散模型（收官）</h2>
+<p>前向加噪 · 从纯噪声重建环形（覆盖率 0.999）</p><div class="grid">
+<img src="chapters/ch20_diffusion_models/_plots/fig1_forward.png">
+<img src="chapters/ch20_diffusion_models/_plots/fig2_generated.png">
+</div></div>
+
+</body></html>
