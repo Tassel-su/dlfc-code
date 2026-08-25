@@ -110,14 +110,18 @@ def main() -> None:
     W = rng.normal(0, 0.5, (D, M_lat))
     sigma2 = 1.0
     for _ in range(50):
-        # E 步：后验 q(z|x) 的充分统计量
+        # ---- E 步：后验 q(z|x) 的充分统计量 ----
+        # 高斯潜变量的后验也是高斯：q(z|x) = N(Ez, Minv)
+        # Minv = (WᵀW + σ²I)⁻¹ 是后验协方差
         M_mat = W.T @ W + sigma2 * np.eye(M_lat)
         Minv = np.linalg.inv(M_mat)
-        Ez = X @ W @ Minv                              # E[z|x]
-        Ezz = Minv + Ez[:, None, :] * Ez[:, :, None]   # E[zzᵀ|x]
-        # M 步：更新 W 和 σ²
+        Ez = X @ W @ Minv                              # E[z|x]（后验均值）
+        Ezz = Minv + Ez[:, None, :] * Ez[:, :, None]   # E[zzᵀ|x]（二阶矩 = 协方差 + 外积）
+        # ---- M 步：更新 W 和 σ² ----
+        # W = (Σ x_n E[z_n]ᵀ) (Σ E[z_n z_nᵀ])⁻¹（加权最小二乘的闭式解）
         W_new = (np.sum([np.outer(X[i], Ez[i]) for i in range(len(X))], axis=0)
                  @ np.linalg.inv(np.sum(Ezz, axis=0)))
+        # σ² = E[||x - Wz||²] 的平均（重构误差的期望）
         sigma2 = float(np.mean([np.sum(X[i] ** 2) - 2 * X[i] @ W_new @ Ez[i]
                                 + np.trace(Ezz[i] @ W_new.T @ W_new)
                                 for i in range(len(X))]) / D)

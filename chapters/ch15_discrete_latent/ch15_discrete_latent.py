@@ -101,25 +101,35 @@ def main() -> None:
     elbos = []
     for it in range(60):
         # ---- E 步：责任（后验）gamma_nk = π_k N(x_n|μ_k,Σ_k) / Σ_j ... ----
+        # ---- E 步：计算责任（后验概率）gamma_nk ----
+        # gamma_nk = π_k N(x_n|μ_k,Σ_k) / Σ_j π_j N(x_n|μ_j,Σ_j)
+        # 含义：第 n 个样本"属于"第 k 个高斯分量的概率（软归属）
         log_resp = np.zeros((len(X), K))
         for k in range(K):
             diff = X - mu_em[k]
+            # 马氏距离平方：(x-μ)ᵀΣ⁻¹(x-μ)，逐样本计算
             maha = np.sum(diff @ np.linalg.inv(Sig[k]) * diff, axis=1)
             logdet = np.log(np.linalg.det(Sig[k]) + 1e-12)
+            # 高斯对数密度 + log π_k（在 log 域计算，避免数值下溢）
             log_resp[:, k] = np.log(pi[k] + 1e-12) - 0.5 * (maha + logdet + 2 * np.log(2 * np.pi))
+        # softmax 归一化（减去最大值再 exp = 数值稳定）
         log_resp_shift = log_resp - log_resp.max(axis=1, keepdims=True)
         resp = np.exp(log_resp_shift)
         resp /= resp.sum(axis=1, keepdims=True)
-        # ---- ELBO（书中 15.4 节）：Σ γ(ln p(x,z) - ln γ)，用未平移的 log_resp ----
-        Nk = resp.sum(axis=0)
+        # ---- ELBO（书中 15.4 节）：Σ γ(ln p(x,z) - ln γ) ----
+        Nk = resp.sum(axis=0)                          # 每个分量的"有效样本数"
         elbo = float(np.sum(resp * log_resp) - np.sum(resp * np.log(resp + 1e-12)))
         elbos.append(elbo)
-        # ---- M 步：更新 π、μ、Σ ----
-        pi = Nk / len(X)
+        # ---- M 步：用责任做加权更新 ----
+        pi = Nk / len(X)                               # 混合系数 = 有效样本比例
         for k in range(K):
-            rk = resp[:, k]
+            rk = resp[:, k]                            # 第 k 分量对每个样本的责任
+            # 加权均值：μ_k = Σ γ_nk x_n / Σ γ_nk
             mu_em[k] = (rk[:, None] * X).sum(axis=0) / (rk.sum() + 1e-12)
             diff = X - mu_em[k]
+            # 加权协方差：Σ_k = Σ γ_nk (x_n-μ_k)(x_n-μ_k)ᵀ / Σ γ_nk
+            # rk[:,None,None]*diff[:,:,None]*diff[:,None,:]：
+            #   把标量权重乘到每个样本的外积上
             Sig[k] = (rk[:, None, None] * diff[:, :, None] * diff[:, None, :]).sum(axis=0) / (rk.sum() + 1e-12)
         if it % 15 == 0:
             print(f"  iter {it}: ELBO = {elbo:.3f}")
