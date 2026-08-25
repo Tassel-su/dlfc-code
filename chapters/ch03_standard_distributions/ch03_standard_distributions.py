@@ -7,7 +7,7 @@
 
 本章要亲眼看到的现象：
   3.1 离散分布：伯努利 / 二项 / 多项 —— pmf、均值方差、极大似然估计；
-  3.2 多元高斯：几何形状（特征分解 -> 椭球）、条件分布 / 边际分布公式、
+  3.2 多元高斯：几何（特征分解 -> 椭球）、条件分布 / 边际分布公式、
       高斯贝叶斯定理（共轭）、MLE、顺序估计（Robbins-Monro）、高斯混合；
   3.3 周期变量：von Mises 分布（环形数据）；
   3.4 指数族：一般形式 p(x|η)=h(x)g(η)exp(ηᵀu(x))，
@@ -19,21 +19,27 @@
   C:/Python314/python.exe ch03_standard_distributions.py
 输出：
   _plots/ 下多张图 + 终端中文叙述
+
+【阅读提示】重点理解：
+  - pmf（概率质量函数）：离散取值上的概率
+  - 条件分布/边际分布的矩阵分块公式怎么用代码验证
+  - 共轭先验：高斯先验 + 高斯似然 -> 高斯后验（一切有闭式解）
+  - 指数族的统一视角：η 和 u(x) 是核心
 """
 import os
 import sys
 
-# 强制 UTF-8 输出，避免 Windows 控制台 cp1252 打印中文报错
+import numpy as np
+
 try:
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")
 except Exception:
     pass
 
-import numpy as np
-
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, _REPO_ROOT)
+# 共享工具：pmf 函数、高斯密度、绘图
 from utils import (Figure, bernoulli_pmf, binomial_pmf, entropy,
                    gaussian_pdf, multivariate_gaussian_pdf, multinomial_pmf)
 
@@ -41,6 +47,7 @@ PLOTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "_plots")
 
 
 def section(title: str) -> None:
+    """打印小节标题分隔线（纯装饰）。"""
     print("=" * 68)
     print(title)
     print("=" * 68)
@@ -54,27 +61,27 @@ def main() -> None:
 
     # ---- 3.1.1 伯努利分布 ----
     print("-- 伯努利 Bern(x|μ) = μ^x (1-μ)^(1-x)，x∈{0,1}（书中 3.1.1 节）")
-    mu = 0.6
+    mu = 0.6                                        # 硬币正面概率
+    # bernoulli_pmf(x, mu)：x=1 时返回 mu；x=0 时返回 1-mu
     print(f"  p(1|μ={mu}) = {bernoulli_pmf(1, mu):.3f}，p(0|μ) = {bernoulli_pmf(0, mu):.3f}")
-    # 均值 E[x] = μ，方差 var[x] = μ(1-μ) —— 用大量样本验证
-    samples = np.random.default_rng(0).random(200_000) < mu
+    # 均值 E[x] = μ，方差 var[x] = μ(1-μ) —— 用 20 万样本验证
+    samples = np.random.default_rng(0).random(200_000) < mu   # 掷 20 万次硬币
     print(f"  样本均值 {samples.mean():.4f}（理论 μ={mu}），"
           f"样本方差 {samples.var():.4f}（理论 μ(1-μ)={mu*(1-mu):.4f}）")
-    # MLE：μ_ML = (1/N) Σ x_n（即正面比例）
+    # MLE：μ_ML = (1/N) Σ x_n = 正面比例（大数定律）
     mu_ml = float(samples.mean())
     print(f"  MLE: μ_ML = 样本均值 = {mu_ml:.4f}（N 越大越接近真实 μ）")
 
     # ---- 3.1.2 二项分布 ----
     print("\n-- 二项 Bin(m|N,μ) = C(N,m) μ^m (1-μ)^(N-m)（书中 3.1.2 节）")
-    N_bin, mu_bin = 10, 0.3
-    ms = np.arange(0, N_bin + 1)
+    N_bin, mu_bin = 10, 0.3                         # 掷 10 次，正面概率 0.3
+    ms = np.arange(0, N_bin + 1)                    # 可能出现的正面次数 0..10
+    # 列表推导式：对每个 m 计算概率，得到 11 个概率
     pmfs = np.array([binomial_pmf(m, N_bin, mu_bin) for m in ms])
     print(f"  N={N_bin}, μ={mu_bin}：最大概率出现在 m={int(ms[np.argmax(pmfs)])}（约 Nμ={N_bin*mu_bin}）")
-    # 归一化验证：所有 m 的 pmf 之和 = 1
     assert abs(pmfs.sum() - 1.0) < 1e-9, "二项分布未归一化"
-    # 均值 = Nμ，方差 = Nμ(1-μ)
     print(f"  验证：Σpmf={pmfs.sum():.6f}；E[m]=Nμ={N_bin*mu_bin}，Var=Nμ(1-μ)={N_bin*mu_bin*(1-mu_bin):.4f}")
-    # 画 pmf 条形（用散点+线近似）
+    # 画 pmf（用折线 + 散点近似条形图）
     fig = Figure("二项分布 Bin(m|10, 0.3) 的 pmf", "m", "p(m)")
     fig.line(ms, pmfs, label="pmf")
     fig.scatter(ms, pmfs, label="取值点")
@@ -82,11 +89,11 @@ def main() -> None:
 
     # ---- 3.1.3 多项分布 ----
     print("\n-- 多项 Mult(m1..mK|μ1..μK)（书中 3.1.3 节）")
-    probs = np.array([0.3, 0.5, 0.2])
-    counts = np.array([3, 5, 2])
+    probs = np.array([0.3, 0.5, 0.2])               # 三种结果的概率
+    counts = np.array([3, 5, 2])                    # 观察到的各结果次数
     p_multi = multinomial_pmf(counts, probs)
     print(f"  抽取 10 次，得 (3,5,2) 的概率 = {p_multi:.5f}")
-    # MLE：μ_k = m_k / N
+    # MLE：μ_k = m_k / N（频数比例，与伯努利同理）
     mu_mle = counts / counts.sum()
     print(f"  MLE: μ_ML = m_k/N = {np.round(mu_mle, 3)}（理论 μ={probs}）")
 
@@ -98,7 +105,7 @@ def main() -> None:
     # ---- 3.2.1 几何：协方差特征分解 -> 椭球 ----
     print("-- 3.2.1 几何：Σ 的特征分解决定椭球的轴长与方向")
     Sigma = np.array([[2.0, 0.6], [0.6, 1.0]])
-    eigvals, eigvecs = np.linalg.eigh(Sigma)          # 对称矩阵特征分解
+    eigvals, eigvecs = np.linalg.eigh(Sigma)        # 对称矩阵特征分解（升序）
     print(f"  特征值 λ = {np.round(eigvals, 3)}，特征向量方向 = {np.round(eigvecs, 3)}")
     print(f"  椭球半轴长 = √λ = {np.round(np.sqrt(eigvals), 3)}（沿特征向量方向）")
 
@@ -106,55 +113,56 @@ def main() -> None:
     print("\n-- 3.2.2 矩：E[x]=μ，cov[x]=Σ（用样本验证）")
     rng = np.random.default_rng(1)
     mu2 = np.array([1.0, -2.0])
-    xs = rng.multivariate_normal(mu2, Sigma, size=100_000)
+    xs = rng.multivariate_normal(mu2, Sigma, size=100_000)   # 从多元高斯采样
     print(f"  样本均值 {np.round(xs.mean(axis=0), 3)}（理论 {mu2}）")
     print(f"  样本协方差 {np.round(np.cov(xs.T), 3)}（理论 {Sigma}）")
 
     # ---- 3.2.3 局限：单高斯不能表示多峰 ----
     print("\n-- 3.2.3 局限：单个高斯只能有一个峰（书中图 3.6 讨论）")
-    # 生成双峰数据，用单个高斯拟合，直观看到"单峰拟合双峰"的失败
+    # 生成双峰数据（两个相距很远的团），用单个高斯拟合
     comp1 = rng.multivariate_normal([-2, 0], [[0.5, 0], [0, 0.5]], 50_000)
     comp2 = rng.multivariate_normal([2, 0], [[0.5, 0], [0, 0.5]], 50_000)
-    bimodal = np.vstack([comp1, comp2])
-    mu_fit = bimodal.mean(axis=0)                     # 单高斯的 MLE 均值
+    bimodal = np.vstack([comp1, comp2])             # 上下拼接 -> (100000, 2)
+    mu_fit = bimodal.mean(axis=0)                   # 单高斯的 MLE 均值
     cov_fit = np.cov(bimodal.T)
     print(f"  双峰数据拟合出的单高斯：均值 {np.round(mu_fit,2)}（夹在两峰中间），")
     print(f"  协方差 {np.round(np.diag(cov_fit),2)}（被两峰拉大）—— 这就是单高斯的局限")
 
-    # ---- 3.2.4/3.2.5 条件分布与边际分布（书中 3.2.4/3.2.5 节）----
+    # ---- 3.2.4/3.2.5 条件分布与边际分布 ----
     print("\n-- 3.2.4/3.2.5 条件与边际（分块矩阵公式 + 数值验证）")
-    # 分块：x = (x_a, x_b)，a 是 1 维，b 是 1 维
+    # 把变量分成 x = (x_a, x_b)，这里各 1 维，所以是 1x1 分块
     mu_ab = np.array([1.0, 2.0])
     Sig_aa = np.array([[1.5]])
     Sig_ab = np.array([[0.8]])
     Sig_ba = np.array([[0.8]])
     Sig_bb = np.array([[2.0]])
-    # 条件分布公式：p(x_a|x_b) = N( μ_a + Σ_ab Σ_bb⁻¹ (x_b-μ_b), Σ_aa - Σ_ab Σ_bb⁻¹ Σ_ba )
+    # 条件分布公式：p(x_a|x_b) = N( μ_a + Σ_ab Σ_bb⁻¹ (x_b-μ_b),
+    #                               Σ_aa - Σ_ab Σ_bb⁻¹ Σ_ba )
     x_b_val = 1.0
-    # 1x1 情形直接标量运算（等价于矩阵公式 Σ_ab Σ_bb⁻¹ (x_b-μ_b)）
+    # 1x1 情形直接标量运算（等价于矩阵公式）
     mu_cond = mu_ab[0] + (Sig_ab[0, 0] / Sig_bb[0, 0]) * (x_b_val - mu_ab[1])
     var_cond = float(Sig_aa[0, 0] - Sig_ab[0, 0] * Sig_ba[0, 0] / Sig_bb[0, 0])
     print(f"  给定 x_b={x_b_val}：p(x_a|x_b) 均值 = {mu_cond:.3f}，方差 = {var_cond:.3f}")
-    # 数值验证：从联合分布采样，再筛出 x_b 接近给定值的样本，比较其 x_a 分布
+    # 数值验证：从联合分布采样，筛出 x_b 接近给定值的样本，看 x_a 的均值
     Sigma_full = np.array([[1.5, 0.8], [0.8, 2.0]])
     samples2 = rng.multivariate_normal(mu_ab, Sigma_full, size=200_000)
-    mask = np.abs(samples2[:, 1] - x_b_val) < 0.05      # 筛选 x_b≈给定值
+    mask = np.abs(samples2[:, 1] - x_b_val) < 0.05      # 布尔筛选
     emp_mean = samples2[mask, 0].mean()
     print(f"  条件采样验证：筛选后 x_a 均值 = {emp_mean:.3f}（公式 {mu_cond:.3f}）")
     assert abs(emp_mean - mu_cond) < 0.1, "条件分布公式与采样不符"
-    # 边际分布：p(x_a) = N(μ_a, Σ_aa)
+    # 边际分布：p(x_a) = N(μ_a, Σ_aa)（把 x_b 积分掉，公式直接给结果）
     print(f"  边际 p(x_a) 的方差 = Σ_aa = {Sig_aa[0,0]}（公式直接给出，无需计算）")
 
     # ---- 3.2.6 高斯的贝叶斯定理（共轭先验）----
     print("\n-- 3.2.6 高斯贝叶斯：先验 N(μ|μ0,σ0²) + 数据 -> 后验 N(μ|μN,σN²)")
-    mu0, sigma0_2 = 0.0, 1.0       # 先验：均值 μ 的先验分布
+    mu0, sigma0_2 = 0.0, 1.0       # 先验：对均值 μ 的初始信念
     sigma2 = 0.5                   # 数据噪声方差（已知）
     data = rng.normal(1.2, np.sqrt(sigma2), size=5)   # 5 个观测
     xbar = data.mean()
     N_dat = data.size
-    # 后验参数（书中公式 3.49-3.51 形式）：
-    #   1/σN² = 1/σ0² + N/σ²
-    #   μN = σN² ( μ0/σ0² + N x̄/σ² )
+    # 后验参数（书中公式）：
+    #   1/σN² = 1/σ0² + N/σ²     （精度相加：数据越多信念越集中）
+    #   μN = σN² ( μ0/σ0² + N x̄/σ² )（先验均值与数据均值的精度加权平均）
     sigmaN2 = 1.0 / (1.0 / sigma0_2 + N_dat / sigma2)
     muN = sigmaN2 * (mu0 / sigma0_2 + N_dat * xbar / sigma2)
     print(f"  先验 μ~N({mu0},{sigma0_2})，观测 x̄={xbar:.3f}（N={N_dat}）")
@@ -164,6 +172,7 @@ def main() -> None:
     print("\n-- 3.2.7 MLE：μ_ML = x̄，Σ_ML = (1/N)Σ(x_n-x̄)(x_n-x̄)ᵀ")
     mu_ml2 = xs.mean(axis=0)
     diff = xs - mu_ml2
+    # diff.T @ diff：所有样本的外积之和（矩阵乘法一次算完）
     Sigma_ml = (diff.T @ diff) / xs.shape[0]          # 注意除以 N（不是 N-1）
     print(f"  μ_ML = {np.round(mu_ml2, 3)}，Σ_ML = {np.round(Sigma_ml, 3)}")
     print(f"  （对照 np.cov 用 N-1：{np.round(np.cov(xs.T), 3)} —— 与第 2 章的偏差话题呼应）")
@@ -172,17 +181,20 @@ def main() -> None:
     print("\n-- 3.2.8 顺序估计：μ_N = μ_{N-1} + (1/N)(x_N - μ_{N-1})")
     seq_data = rng.normal(1.0, 1.0, size=500)
     mu_seq = 0.0
+    # 逐个样本在线更新均值（不用存全部数据）
+    # enumerate(seq_data, start=1)：i 从 1 开始编号
     for i, x in enumerate(seq_data, start=1):
-        mu_seq += (1.0 / i) * (x - mu_seq)            # 每来一个数据在线更新均值
+        mu_seq += (1.0 / i) * (x - mu_seq)            # 每来一个数据修正一次
     print(f"  顺序估计终值 μ = {mu_seq:.4f}（批处理均值 {seq_data.mean():.4f}，两者等价）")
     assert abs(mu_seq - seq_data.mean()) < 1e-9, "顺序估计与批处理不一致"
 
     # ---- 3.2.9 高斯混合 ----
     print("\n-- 3.2.9 高斯混合：p(x) = Σ_k π_k N(x|μ_k, Σ_k)")
-    pis = np.array([0.4, 0.6])
-    mus = np.array([-2.0, 2.0])
-    sigmas = np.array([0.5, 0.8])
+    pis = np.array([0.4, 0.6])                        # 两个分量的权重（和为 1）
+    mus = np.array([-2.0, 2.0])                       # 两个分量的均值
+    sigmas = np.array([0.5, 0.8])                     # 两个分量的标准差
     xg = np.linspace(-5, 5, 400)
+    # 混合密度 = 权重1 x 高斯1 + 权重2 x 高斯2（逐点相加）
     mix = pis[0] * gaussian_pdf(xg, mus[0], sigmas[0] ** 2) + \
           pis[1] * gaussian_pdf(xg, mus[1], sigmas[1] ** 2)
     fig = Figure("高斯混合 0.4·N(-2,0.25)+0.6·N(2,0.64)", "x", "p(x)")
@@ -190,8 +202,7 @@ def main() -> None:
     fig.line(xg, pis[0] * gaussian_pdf(xg, mus[0], sigmas[0] ** 2), label="分量1")
     fig.line(xg, pis[1] * gaussian_pdf(xg, mus[1], sigmas[1] ** 2), label="分量2")
     fig.save(os.path.join(PLOTS_DIR, "fig2_gaussian_mixture.png"))
-    # 归一化验证
-    mix_int = float(np.sum(mix) * (xg[1] - xg[0]))
+    mix_int = float(np.sum(mix) * (xg[1] - xg[0]))    # 矩形法积分
     print(f"  混合密度积分 ≈ {mix_int:.4f}（应 ≈1）")
     assert abs(mix_int - 1.0) < 1e-3, "混合密度未归一化"
 
@@ -209,8 +220,7 @@ def main() -> None:
     for m in (0.0, 1.0, 4.0):
         fig.line(theta_grid, von_mises_pdf(theta_grid, 0.0, m), label=f"m={m}")
     fig.save(os.path.join(PLOTS_DIR, "fig3_von_mises.png"))
-    # 归一化验证
-    for m in (0.0, 2.0, 5.0):
+    for m in (0.0, 2.0, 5.0):                          # 归一化检查
         val = float(np.sum(von_mises_pdf(theta_grid, 0.0, m)) * (theta_grid[1] - theta_grid[0]))
         print(f"  m={m}：∫p dθ ≈ {val:.4f}（应 ≈1）")
     print("  注意 m=0 时 von Mises 退化为均匀分布（cos 项为 0）")
@@ -223,11 +233,11 @@ def main() -> None:
     print("  Bern(x|μ) = exp( x ln(μ/(1-μ)) + ln(1-μ) )")
     print("  自然参数 η = ln(μ/(1-μ))，充分统计量 u(x) = x")
     mu_demo = 0.3
-    eta = np.log(mu_demo / (1 - mu_demo))
+    eta = np.log(mu_demo / (1 - mu_demo))             # logit 变换
     print(f"  例：μ={mu_demo} -> η={eta:.3f}（logit 变换）")
-    # 验证指数族形式还原伯努利
+    # 用指数族一般形式计算伯努利概率：exp(ηx) / (1+exp(η))
     def bernoulli_expfam(x, eta):
-        """用指数族一般形式计算 Bern 概率：exp(ηx) / (1+exp(η))。"""
+        """指数族形式。分母 1+e^η 就是归一化常数 g(η) 的倒数。"""
         return np.exp(eta * x) / (1 + np.exp(eta))
     for x in (0, 1):
         v1 = bernoulli_expfam(x, eta)
@@ -249,9 +259,10 @@ def main() -> None:
 
     # ---- 3.5.1 直方图：箱宽影响 ----
     fig = Figure("直方图：箱宽的影响（书中图 3.16 风格）", "x", "密度")
-    for bw in (0.1, 0.5, 2.0):
+    for bw in (0.1, 0.5, 2.0):                        # 三种箱宽
+        # np.arange(-4, 4, bw)：按箱宽切分数据范围作为分箱边界
         hist_y, hist_x = np.histogram(mix_data, bins=np.arange(-4, 4, bw), density=True)
-        cc = (hist_x[:-1] + hist_x[1:]) / 2
+        cc = (hist_x[:-1] + hist_x[1:]) / 2           # 每箱中心
         fig.line(cc, hist_y, label=f"箱宽={bw}")
     fig.save(os.path.join(PLOTS_DIR, "fig4_histogram.png"))
     print("  箱宽小 -> 噪声大；箱宽大 -> 过度平滑；箱宽影响起点位置（直方图固有缺陷）")
@@ -259,11 +270,12 @@ def main() -> None:
     # ---- 3.5.2 核密度估计：带宽影响 ----
     print("\n-- 核密度：p(x) = (1/N) Σ K_h(x - x_n)，高斯核，带宽 h 影响平滑度")
     def kde(x_grid, data, h):
-        """高斯核密度估计：p(x)=1/(N h) Σ φ((x-x_n)/h)。"""
+        """高斯核密度估计：每个数据点放一个高斯"小包"，叠加后归一化。"""
         out = np.zeros_like(x_grid)
-        for xn in data:
-            out += gaussian_pdf((x_grid - xn) / h, 0.0, 1.0)   # 标准高斯核
-        return out / (len(data) * h)
+        for xn in data:                               # 对每个数据点
+            # (x_grid - xn)/h：把核宽度缩放到 h（带宽）
+            out += gaussian_pdf((x_grid - xn) / h, 0.0, 1.0)
+        return out / (len(data) * h)                  # 除以 N 和 h（归一化）
     xk = np.linspace(-4, 4, 400)
     fig = Figure("核密度估计：带宽 h 的影响（书中图 3.17 风格）", "x", "p(x)")
     for h in (0.1, 0.3, 1.0):
@@ -273,18 +285,17 @@ def main() -> None:
 
     # ---- 3.5.3 k 近邻密度 ----
     print("\n-- k 近邻：p(x) = k / (N V)，V 是包含 k 个近邻的球体积")
-    # 在 1 维上：V = 2r（半径 r 的"球"）
     def knn_density_1d(x_grid, data, k):
-        """一维 k 近邻密度估计。"""
+        """一维 k 近邻密度：到第 k 个近邻的距离 r 决定局部体积 V=2r。"""
         out = np.zeros_like(x_grid)
-        data_sorted = np.sort(data)
+        data_sorted = np.sort(data)                   # 排序后距离计算更快
         n = len(data_sorted)
         for i, xv in enumerate(x_grid):
-            dists = np.abs(data_sorted - xv)
-            idx = np.argsort(dists)
-            r = dists[idx[k - 1]]                      # 第 k 个近邻的距离
-            r = max(r, 1e-6)
-            out[i] = k / (n * 2 * r)                   # V = 2r
+            dists = np.abs(data_sorted - xv)          # 到所有数据点的距离
+            idx = np.argsort(dists)                   # 按距离排序的索引
+            r = dists[idx[k - 1]]                     # 第 k 个近邻的距离
+            r = max(r, 1e-6)                          # 防止除零
+            out[i] = k / (n * 2 * r)                  # V = 2r（一维"球"）
         return out
     fig = Figure("k 近邻密度估计（书中图 3.18 风格）", "x", "p(x)")
     fig.line(xk, knn_density_1d(xk, mix_data, k=10), label="k=10")
