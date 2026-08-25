@@ -54,6 +54,12 @@ def scaled_dot_product_attention(Q, K, V, mask=None):
 
     Q, K, V: (L, dk)（单样本、单头）；mask: (L, L) 因果掩码（-inf 表示屏蔽）。
     返回 (输出, 注意力权重)。
+
+    三步理解：
+      1) scores = Q @ K.T / √dk ：每个查询与所有键的"匹配度"
+         （点积大 = 相似 = 应多关注）；除以 √dk 防止 softmax 饱和
+      2) softmax 归一化：匹配度变成权重（行和为 1）
+      3) out = attn @ V：按权重混合所有位置的值
     """
     dk = K.shape[-1]
     scores = Q @ K.T / np.sqrt(dk)          # (L, L)：每对位置的匹配度
@@ -65,7 +71,16 @@ def scaled_dot_product_attention(Q, K, V, mask=None):
 
 
 def attention_backward(dout, Q, K, V, attn, mask=None):
-    """缩放点积注意力的反向传播（用于梯度验证与训练）。"""
+    """缩放点积注意力的反向传播（用于梯度验证与训练）。
+
+    四步链式法则（从输出往输入推）：
+      1) dV = attnᵀ @ dout      （V 的梯度 = 注意力权重 x 输出梯度）
+      2) dattn = dout @ Vᵀ      （注意力权重的梯度）
+      3) softmax 反向得到 dscores：
+         dscores = attn ⊙ (dattn - Σ(dattn ⊙ attn))   （softmax 的著名梯度公式）
+         再除以 √dk（对应前向的缩放）
+      4) dQ = dscores @ K；dK = dscoresᵀ @ Q（还原到 Q、K）
+    """
     dk = K.shape[-1]
     scores = Q @ K.T / np.sqrt(dk)
     if mask is not None:
