@@ -92,15 +92,16 @@ def main() -> None:
     gen_means = []
 
     for step in range(4000):
-        # ---- 更新判别器 D ----
-        real = sample_real(batch)
+        # ========== 第一步：更新判别器 D（学会分辨真假）==========
+        real = sample_real(batch)          # 真样本
         z = rng.normal(0, 1, (batch, 2))
-        fake = generator(z, g_params)
-        d_real = discriminator(real, d_params)
-        d_fake = discriminator(fake, d_params)
-        # D 损失 = -[ln D(real) + ln(1-D(fake))]（梯度下降最小化）
+        fake = generator(z, g_params)      # 假样本（当前生成器产出）
+        d_real = discriminator(real, d_params)   # D 对真样本的输出（应接近 1）
+        d_fake = discriminator(fake, d_params)   # D 对假样本的输出（应接近 0）
+        # D 的损失：想让 D(real) -> 1、D(fake) -> 0
+        #   -[ln D(real) + ln(1-D(fake))] 最小化
         d_loss = -float(np.mean(np.log(d_real + 1e-12) + np.log(1 - d_fake + 1e-12)))
-        # D 梯度（手推链式法则）
+        # D 梯度（手推链式法则）：d/dD [-ln D] = -1/D
         dd_real = -(1.0 / (d_real + 1e-12)) / batch          # dL/d(D(real))
         dd_fake = (1.0 / (1 - d_fake + 1e-12)) / batch       # dL/d(D(fake))
         def d_grad(x, dd, d_params):
