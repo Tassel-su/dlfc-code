@@ -58,18 +58,21 @@ def im2col(x, kh, kw, stride=1, pad=0):
     之后卷积 = 矩阵乘法（W 展平后点乘 cols）。
     """
     N, C, H, W = x.shape
+    # 输出特征图尺寸：Hp = (H + 2*pad - kh) // stride + 1（卷积输出尺寸公式）
     Hp = (H + 2 * pad - kh) // stride + 1
     Wp = (W + 2 * pad - kw) // stride + 1
+    # 先给图像四周补零（pad 圈），让边界像素也能被卷积覆盖
     xp = np.pad(x, ((0, 0), (0, 0), (pad, pad), (pad, pad)), mode="constant")
+    # cols 的每个"行"：一个通道 x 一个核位置 的所有空间采样点
     cols = np.empty((N, C * kh * kw, Hp * Wp), dtype=x.dtype)
     idx = 0
-    for c in range(C):
-        for i in range(kh):
-            for j in range(kw):
-                # 通道 c 在核位置 (i,j) 的空间采样：输出位置 p 对应输入 i+p*stride
+    for c in range(C):           # 遍历通道
+        for i in range(kh):      # 核的行偏移
+            for j in range(kw):  # 核的列偏移
+                # 关键切片：输出位置 p 对应的输入位置 = i + p*stride
                 patch = xp[:, c, i:i + (Hp - 1) * stride + 1:stride,
                            j:j + (Wp - 1) * stride + 1:stride]      # (N, Hp, Wp)
-                cols[:, idx] = patch.reshape(N, -1)
+                cols[:, idx] = patch.reshape(N, -1)   # 展平成 (N, Hp*Wp)
                 idx += 1
     return cols
 
@@ -116,14 +119,26 @@ class Conv2D:
         return out.reshape(N, F, Hp, Wp)
 
     def backward(self, dout, lr):
+        """卷积反向传播：dW、db、dx。
+
+        dout 是损失对输出的梯度 (N, F, Hp, Wp)。
+        思路：前向是"线性变换"，反向就是它的转置：
+          dW = dout @ colsᵀ          （每个权重 = 它作用的补丁 × 输出梯度）
+          dcols = Wᵀ @ dout          （每个输入补丁收到的梯度）
+          dx = col2im(dcols)         （把补丁梯度散回原图）
+        """
         N, F, Hp, Wp = dout.shape
         kh, kw = self.W.shape[2], self.W.shape[3]
-        cols = im2col(self.x, kh, kw, self.stride, self.pad)
-        dout_flat = dout.reshape(N, F, -1)
+        cols = im2col(self.x, kh, kw, self.stride, self.pad)      # (N, C*kh*kw, Hp*Wp)
+        dout_flat = dout.reshape(N, F, -1)                       # (N, F, Hp*Wp)
+        # einsum("njk,nlk->jl")：对 n（样本）和 k（空间位置）求和
+        # = 对所有样本、所有位置的 (输出梯度 × 输入补丁) 求和 -> 权重的梯度
         dWf = np.einsum("njk,nlk->jl", dout_flat, cols) / N      # (F, C*kh*kw)
         self.W -= lr * dWf.reshape(self.W.shape)
-        db = dout_flat.sum(axis=(0, 2)) / N
+        db = dout_flat.sum(axis=(0, 2)) / N                      # 偏置梯度 = 输出梯度求和
         self.b -= lr * db
+        # einsum("njk,jl->nlk")：对 j（滤波器）求和
+        # = 用权重矩阵把输出梯度映射回输入补丁空间
         dcols = np.einsum("njk,jl->nlk", dout_flat, self.W.reshape(F, -1)) / N
         return col2im(dcols, self.x.shape, kh, kw, self.stride, self.pad)
 
