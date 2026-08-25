@@ -7,15 +7,19 @@
 
 本章要亲眼看到的现象：
   7.1 误差曲面：局部二次近似、条件数决定收敛速度；
-  7.2 梯度下降家族：批量 GD / 随机 SGD / 小批量 mini-batch；
-      参数初始化（全零是陷阱）；
-  7.3 收敛加速：动量法（momentum）、学习率调度、RMSProp、Adam；
-  7.4 归一化：数据标准化改善条件数、批归一化 / 层归一化。
+  7.2 梯度下降家族：批量 GD / 随机 SGD；参数初始化；
+  7.3 收敛加速：动量、学习率调度、RMSProp、Adam；
+  7.4 归一化：数据标准化改善条件数。
 
 运行方式：
   C:/Python314/python.exe ch07_gradient_descent.py
 输出：
   _plots/ 下多张图 + 终端中文叙述
+
+【阅读提示】本章是"优化器手册"：
+  - 普通 GD 为什么在病态问题上慢（条件数）
+  - 动量/Adam 各解决什么问题
+  - 数据标准化为什么让学习率可以更大
 """
 import os
 import sys
@@ -43,26 +47,21 @@ def section(title: str) -> None:
 
 def main() -> None:
     # ==================================================================
-    # 7.1 误差曲面：局部二次近似与条件数（书中 7.1 节）
+    # 7.1 误差曲面：局部二次近似与条件数
     # ==================================================================
     section("7.1 误差曲面：E(w) ≈ E(w*) + ½(w-w*)ᵀH(w-w*)（书中 7.1.1 节）")
     print("最小值附近误差曲面可用二次型近似，Hessian H 的特征值决定「谷」的形状。")
     print("条件数 = λ_max/λ_min：越大，谷越狭长，普通梯度下降越慢。")
 
-    # 二维二次型：E(w) = ½(w1² + c*w2²)，c 控制条件数
-    def quad(c):
-        H = np.diag([1.0, c])
-        return H
-
+    # 二次型 E(w) = ½(w1² + c*w2²)，c 控制条件数（各方向曲率比）
     for c in (1.0, 10.0, 100.0):
         print(f"  条件数 λ_max/λ_min = {c:.0f}：谷宽比 {1:.0f}:{1/np.sqrt(c):.3f}（越狭长越难优化）")
 
-    # 画误差曲面等高线（条件数 10）
+    # 画误差曲面等高线（条件数 10：椭圆）
     ws1 = np.linspace(-3, 3, 100)
     W1, W2 = np.meshgrid(ws1, ws1)
     E = 0.5 * (W1 ** 2 + 10 * W2 ** 2)
     fig = Figure("二次误差曲面 E(w) = ½(w1² + 10·w2²)", "w1", "w2")
-    # 等高线用散点着色近似（低值=深色不可用，这里画几条等高线轨迹）
     for level in (1, 4, 16, 64):
         theta = np.linspace(0, 2 * np.pi, 200)
         r = np.sqrt(2 * level)
@@ -71,46 +70,40 @@ def main() -> None:
     print("  等高线是椭圆：长轴沿 w1（平坦方向），短轴沿 w2（陡峭方向）")
 
     # ==================================================================
-    # 7.2 梯度下降家族（书中 7.2 节）
+    # 7.2 梯度下降家族
     # ==================================================================
-    section("7.2 批量 / 随机 / 小批量梯度下降（书中 7.2 节）")
-    print("目标：最小化一个简单的二次函数 E(w) = ½Σ(wᵀφ_n - t_n)²（线性回归问题）")
+    section("7.2 批量 / 随机梯度下降（书中 7.2 节）")
+    print("目标：最小化线性回归误差 E(w) = ½Σ(wᵀφ_n - t_n)²")
 
-    # 构造一个小型线性回归问题
     rng = np.random.default_rng(0)
     N = 100
     X = rng.normal(0, 1, (N, 2))
     t_true = X @ np.array([1.5, -1.0]) + rng.normal(0, 0.1, N)
 
     def full_grad(w):
-        """全批量梯度。"""
+        """全批量梯度：用所有样本的平均梯度。"""
         return X.T @ (X @ w - t_true) / N
 
     def sgd_step(w, idx):
-        """单个样本梯度。"""
+        """单个样本梯度（SGD 用）。"""
         return X[idx] * (X[idx] @ w - t_true[idx])
 
-    def run_optimizer(grad_fn, n_steps, lr, momentum=0.0, sgd=False, batch_size=1, seed=0):
-        """通用优化循环，返回每步误差。"""
+    def run_optimizer(grad_fn, n_steps, lr, sgd=False, seed=0):
+        """通用优化循环，返回每步误差（看收敛轨迹）。"""
         w = np.zeros(2)
-        v = np.zeros(2)
         errs = []
         r = np.random.default_rng(seed)
         perm = r.permutation(N) if sgd else None
         for step in range(n_steps):
             if sgd:
-                idx = perm[step % N]
+                idx = perm[step % N]           # 每步取一个样本（轮流）
                 g = grad_fn(w, idx)
             else:
                 g = grad_fn(w)
-            v = momentum * v - lr * g            # 动量更新
-            w = w + v
+            w = w - lr * g                     # 梯度下降更新
             errs.append(float(np.sum((X @ w - t_true) ** 2) / 2))
         return w, errs
 
-    w_opt, *_ = np.linalg.lstsq(X, t_true, rcond=None)
-
-    # ---- 批量 GD vs SGD vs 小批量 ----
     n_steps = 200
     lr = 0.1
     w_batch, err_batch = run_optimizer(full_grad, n_steps, lr)
@@ -118,31 +111,34 @@ def main() -> None:
     print(f"  批量 GD  200 步后误差 = {err_batch[-1]:.4f}（平滑下降）")
     print(f"  SGD      200 步后误差 = {err_sgd[-1]:.4f}（波动大但前期快）")
 
-    # 画收敛曲线
     fig = Figure("批量 GD vs SGD 收敛（书中 7.2 节）", "迭代步", "误差")
     fig.line(np.arange(1, n_steps + 1), err_batch, label="批量 GD (lr=0.1)")
     fig.line(np.arange(1, n_steps + 1), err_sgd, label="SGD (lr=2.0)")
     fig.save(os.path.join(PLOTS_DIR, "fig2_batch_vs_sgd.png"))
     print("  SGD 单步计算便宜、能逃离局部极小、天然处理大数据 —— 深度网络标配")
 
-    # ---- 7.2.5 参数初始化：全零是陷阱 ----
+    # ---- 7.2.5 参数初始化 ----
     print("\n-- 7.2.5 参数初始化：全零初始化的对称性问题（书中 7.2.5 节）")
     print("  两层网络若 W1=0：所有隐藏单元收到相同输入、梯度相同 -> 永远对称")
     print("  => 用小的随机初始化打破对称性（如 N(0, 0.01)）")
 
     # ==================================================================
-    # 7.3 收敛加速：动量 / 调度 / RMSProp / Adam（书中 7.3 节）
+    # 7.3 收敛加速：动量 / 调度 / RMSProp / Adam
     # ==================================================================
     section("7.3 动量 / 学习率调度 / RMSProp / Adam（书中 7.3 节）")
-
-    # 用一个病态二次型展示：E = ½(w1² + 100 w2²)，条件数 100
+    # 病态二次型：E = ½(w1² + 100 w2²)，条件数 100
     def ill_grad(w):
         return np.array([w[0], 100.0 * w[1]])
 
     def run_quad(opt, n_steps, **kw):
+        """在病态二次型上跑指定优化器，返回误差轨迹。
+
+        opt 取值：gd / momentum / rmsprop / adam
+        """
         w = np.array([2.0, 0.4])
-        v = np.zeros(2)
-        m = np.zeros(2); s = np.zeros(2)
+        v = np.zeros(2)      # 动量速度
+        m = np.zeros(2)      # Adam 一阶矩（梯度平均）
+        s = np.zeros(2)      # Adam/RMSProp 二阶矩（梯度平方平均）
         errs = []
         lr = kw.get("lr", 0.05)
         beta = kw.get("beta", 0.9)
@@ -150,18 +146,18 @@ def main() -> None:
         eps = 1e-8
         for t in range(1, n_steps + 1):
             g = ill_grad(w)
-            if opt == "gd":
+            if opt == "gd":                      # 普通梯度下降
                 w = w - lr * g
-            elif opt == "momentum":
+            elif opt == "momentum":              # 动量：速度累积 + 阻尼
                 v = beta * v - lr * g
                 w = w + v
-            elif opt == "rmsprop":
+            elif opt == "rmsprop":               # 每维除以梯度平方的移动平均
                 s = 0.9 * s + 0.1 * g ** 2
                 w = w - lr * g / (np.sqrt(s) + eps)
-            elif opt == "adam":
+            elif opt == "adam":                  # 一阶+二阶矩 + 偏置校正
                 m = beta * m + (1 - beta) * g
                 s = beta2 * s + (1 - beta2) * g ** 2
-                mh = m / (1 - beta ** t)
+                mh = m / (1 - beta ** t)         # 偏置校正（早期估计偏小）
                 sh = s / (1 - beta2 ** t)
                 w = w - lr * mh / (np.sqrt(sh) + eps)
             errs.append(float(0.5 * (w[0] ** 2 + 100 * w[1] ** 2)))
@@ -195,7 +191,7 @@ def main() -> None:
     w = np.array([2.0, 0.4])
     errs_decay = []
     for t in range(1, 3001):
-        lr_t = 0.015 * 0.9 ** (t / 300)
+        lr_t = 0.015 * 0.9 ** (t / 300)          # 指数衰减
         w = w - lr_t * (ill_grad(w) + rng_noise.normal(0, 0.5, 2))
         errs_decay.append(float(0.5 * (w[0] ** 2 + 100 * w[1] ** 2)))
     print(f"  SGD 固定 lr 3000 步误差 = {errs_const[-1]:.3e}（停在噪声地板附近）")
@@ -206,7 +202,7 @@ def main() -> None:
     fig.save(os.path.join(PLOTS_DIR, "fig4_lr_schedule.png"))
 
     # ==================================================================
-    # 7.4 归一化（书中 7.4 节）
+    # 7.4 归一化
     # ==================================================================
     section("7.4 归一化：数据标准化改善条件数（书中 7.4 节）")
     # 构造尺度差异巨大的特征：x1 量级 1，x2 量级 1000
@@ -217,9 +213,8 @@ def main() -> None:
     def lin_grad(w):
         return X_scale.T @ (X_scale @ w - t_scale) / 200
 
+    # 未标准化：最大特征值 ~1e6，稳定步长上限 ~1e-6
     w = np.zeros(2)
-    # 未标准化：最大特征值 ~2e8，稳定步长上限 2/λ_max ~ 1e-8。
-    # 用各自的最优稳定步长对比，500 步后看谁离最优解更近。
     lam_raw = np.linalg.eigvalsh(X_scale.T @ X_scale / 200).max()
     lr_raw = 1.8 / lam_raw
     errs_raw = []
