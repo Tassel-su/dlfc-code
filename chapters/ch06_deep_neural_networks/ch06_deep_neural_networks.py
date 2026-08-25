@@ -118,7 +118,7 @@ def main() -> None:
         z = h(W1 @ x + b1)                      # (M,1)@(1,) = (M,)
         return W2 @ z + b2                      # (1,M)@(M,) = (1,)
 
-    def train_mlp(M, iters=3000, lr=0.05, seed=0):
+    def train_mlp(M, iters=5000, lr=0.01, seed=0):
         """用批量梯度下降训练单隐层网络（手动反向传播）。
 
         反向传播公式（链式法则）：
@@ -128,7 +128,9 @@ def main() -> None:
         每一步都做一次前向 + 一次反向，然后更新权重。
         """
         r = np.random.default_rng(seed)
-        W1 = r.normal(0, 1.0, (M, 1))
+        # 小权重初始化（He 风格）：tanh 输入过大会饱和（梯度消失），
+        # 用 std=0.5 让激活保持在有效区间
+        W1 = r.normal(0, 0.5, (M, 1))
         b1 = np.zeros(M)
         W2 = r.normal(0, 0.5, (1, M))
         b2 = np.zeros(1)
