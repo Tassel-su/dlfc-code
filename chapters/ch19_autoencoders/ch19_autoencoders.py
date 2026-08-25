@@ -122,23 +122,33 @@ def main() -> None:
         beta = min(1.0, step / 2500)
         xb = sample_target(batch)
         mu_z, logvar_z = encoder(xb, E_W1, E_b1, E_W2, E_b2)
-        logvar_z = np.clip(logvar_z, -6, 3)
-        sigma_z = np.exp(0.5 * logvar_z)
+        logvar_z = np.clip(logvar_z, -6, 3)          # 数值稳定：限制方差范围
+        sigma_z = np.exp(0.5 * logvar_z)             # 标准差 = e^(0.5 logvar)
+        # ---- 重参数化技巧（书中 19.2.2 节）----
+        # z ~ N(mu, σ²) 不能直接反向传播（采样不可导）。
+        # 技巧：z = μ + σ·ε，ε ~ N(0,1) —— 噪声 ε 不依赖参数，
+        # 梯度可以"穿过"确定性部分 μ、σ 流回 encoder。
         eps = rng.normal(0, 1, (batch, 2))
-        z_rep = mu_z + sigma_z * eps                     # 重参数化技巧
+        z_rep = mu_z + sigma_z * eps
+        # ---- ELBO = 重构项 + β·KL 项 ----
         mu_x = decoder(z_rep, D_W1, D_b1, D_W2, D_b2)
-        recon = np.sum((xb - mu_x) ** 2, axis=1) / (2 * sigma_x2)
-        kl = 0.5 * np.sum(mu_z ** 2 + sigma_z ** 2 - 1 - logvar_z, axis=1)
+        recon = np.sum((xb - mu_x) ** 2, axis=1) / (2 * sigma_x2)   # 重构误差
+        kl = 0.5 * np.sum(mu_z ** 2 + sigma_z ** 2 - 1 - logvar_z, axis=1)  # KL(N||N(0,1))
         loss = float(np.mean(recon + beta * kl))
-        dmu_x = (mu_x - xb) / (sigma_x2 * batch)
+        # ---- 反向（链式法则）----
+        dmu_x = (mu_x - xb) / (sigma_x2 * batch)     # 重构项对 decoder 输出
+        # decoder 梯度（标准 MLP 反向）
         h_d = np.tanh(z_rep @ D_W1 + D_b1)
         dD_W2 = h_d.T @ dmu_x
         dD_b2 = dmu_x.sum(axis=0)
         dh_d = dmu_x @ D_W2.T * (1 - h_d ** 2)
         dD_W1 = z_rep.T @ dh_d
         dD_b1 = dh_d.sum(axis=0)
-        dz = dh_d @ D_W1.T
-        dmu_z = dz + beta * mu_z / batch                 # KL 项乘 β
+        # encoder 梯度：先经 z_rep 回传，再加 KL 项
+        dz = dh_d @ D_W1.T                             # dL/dz_rep
+        # dμ 的梯度 = 重构路径（dz）+ KL 项（β·μ）
+        dmu_z = dz + beta * mu_z / batch
+        # dlogvar 的梯度：z_rep = μ + e^(0.5 logvar)·ε → dz/dlogvar = 0.5·σ·ε
         dlogvar_z = beta * 0.5 * (sigma_z ** 2 - 1) / batch + dz * (0.5 * sigma_z * eps)
         h_e = np.tanh(xb @ E_W1 + E_b1)
         dout = np.concatenate([dmu_z, dlogvar_z], axis=1)

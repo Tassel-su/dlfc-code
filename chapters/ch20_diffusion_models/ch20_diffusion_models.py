@@ -64,10 +64,16 @@ def main() -> None:
     alpha_bar = np.cumprod(1 - beta)
 
     def forward(x0, t):
-        """前向：给 x0 加噪到时刻 t。返回 (x_t, 噪声)。"""
+        """前向：给 x0 加噪到时刻 t。返回 (x_t, 噪声)。
+
+        公式：x_t = √(ᾱ_t) x0 + √(1-ᾱ_t) ε，ε ~ N(0,I)
+        其中 ᾱ_t = Π_{s=1}^{t} (1-β_s)（累积噪声水平）。
+        t 越大 ᾱ 越小 -> x_t 越接近纯噪声。
+        关键：这个变换是"解析的"，不需要学习（这就是扩散核）。
+        """
         t = np.clip(t, 0, T - 1)
-        ab = alpha_bar[t][:, None]
-        eps = rng.normal(0, 1, x0.shape)
+        ab = alpha_bar[t][:, None]               # 每个样本取自己时刻的 ᾱ
+        eps = rng.normal(0, 1, x0.shape)         # 采样高斯噪声
         x_t = np.sqrt(ab) * x0 + np.sqrt(1 - ab) * eps
         return x_t, eps
 
