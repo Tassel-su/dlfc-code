@@ -11,12 +11,17 @@
   9.3 学习曲线：误差 vs 数据量；早停；双重下降（double descent）；
   9.4 参数共享：共享权重大幅减少参数量；
   9.5 残差连接：y = x + F(x)，让深层网络可优化；
-  9.6 模型平均与 Dropout：集成降低方差、Dropout 隐式集成。
+  9.6 模型平均与 Dropout：集成降低方差。
 
 运行方式：
   C:/Python314/python.exe ch09_regularization.py
 输出：
   _plots/ 下多张图 + 终端中文叙述
+
+【阅读提示】重点理解：
+  - L1 vs L2 为什么一个稀疏一个不稀疏
+  - 双重下降实验怎么设计（容量从欠到过参数化）
+  - 残差连接的反向传播为什么多一条"恒等路径"
 """
 import os
 import sys
@@ -44,19 +49,16 @@ def section(title: str) -> None:
 
 def main() -> None:
     # ==================================================================
-    # 9.1 归纳偏置（书中 9.1 节）
+    # 9.1 归纳偏置
     # ==================================================================
     section("9.1 归纳偏置：反问题与 No Free Lunch（书中 9.1 节）")
     print("-- 9.1.1 反问题：有限数据 -> 无限多个函数都拟合同样好")
-    # 两组数据：很多函数都能穿过它们（光滑函数 vs 剧烈振荡函数）
     x_d = np.array([0.0, 0.25, 0.5, 0.75, 1.0])
     t_d = np.array([0.0, 0.7, 1.0, 0.7, 0.0])
     print(f"  5 个数据点：可以拟合出无限多种函数（下图两种都完美穿过）")
     xg = np.linspace(0, 1, 200)
-    # 光滑函数
-    smooth = np.sin(np.pi * xg)
-    # 剧烈振荡函数（也穿过所有点）
-    wild = np.sin(8 * np.pi * xg) * 0.3 + 0.5
+    smooth = np.sin(np.pi * xg)                          # 光滑假设
+    wild = np.sin(8 * np.pi * xg) * 0.3 + 0.5            # 剧烈振荡
     fig = Figure("反问题：两个函数都完美拟合同一组数据（书中 9.1.1 节）", "x", "t")
     fig.line(xg, smooth, label="光滑假设（归纳偏置）")
     fig.line(xg, wild, label="剧烈振荡")
@@ -68,7 +70,6 @@ def main() -> None:
     print("  => 算法必须带先验假设（偏置），没有偏置的算法在所有问题上的表现一样差")
 
     print("\n-- 9.1.3/9.1.4 等变性：输入平移 -> 输出平移（书中 9.1.4 节）")
-    # 演示：函数 f 满足平移等变：f(x+s) = f(x)+s（如一维积分/求导）
     x = np.array([1.0, 2.0, 3.0])
     s = 0.5
     f = lambda v: v ** 2 - 3 * v            # 某个函数
@@ -79,23 +80,25 @@ def main() -> None:
     print("  等变/不变的对称性先验是 CNN（平移等变）、GNN 等架构设计的核心动机")
 
     # ==================================================================
-    # 9.2 权重衰减（书中 9.2 节）
+    # 9.2 权重衰减：L1 与 L2
     # ==================================================================
     section("9.2 权重衰减：L2 与 L1（书中 9.2 节）")
     print("正则化误差：Ẽ(w) = E(w) + (λ/2)‖w‖²（L2）或 E(w) + λ‖w‖₁（L1）")
-    # 用高次多项式演示 L1 vs L2 的稀疏性
     rng = np.random.default_rng(0)
     x_tr = np.linspace(0, 1, 15)
     t_tr = np.sin(2 * np.pi * x_tr) + rng.normal(0, 0.3, 15)
     M = 12
     Phi = poly_design_matrix(x_tr, M)
-    w_l2 = poly_fit_least_squares(x_tr, t_tr, M, lam=1e-4)          # L2
-    # L1 用坐标下降（软阈值）近似求解
+    w_l2 = poly_fit_least_squares(x_tr, t_tr, M, lam=1e-4)          # L2 正则解
+
+    # L1 用坐标下降（软阈值）求解：每次更新一个坐标，软阈值把小的系数压到 0
     def lasso(Phi, t, lam, iters=2000):
         w = np.zeros(Phi.shape[1])
         for _ in range(iters):
             for j in range(Phi.shape[1]):
+                # rho = 第 j 个坐标的"梯度-方向步长"（去掉第 j 列的残差投影）
                 rho = Phi[:, j] @ (t - Phi @ w + w[j] * Phi[:, j])
+                # 软阈值：|rho| < lam 时置 0（这就是稀疏的来源！）
                 w[j] = np.sign(rho) * max(abs(rho) - lam, 0) / (Phi[:, j] @ Phi[:, j])
         return w
     w_l1 = lasso(Phi, t_tr, lam=0.5)
@@ -109,7 +112,7 @@ def main() -> None:
     print("  而 L1 的菱形不是 -> 正则化强度需重新调整。")
 
     # ==================================================================
-    # 9.3 学习曲线 / 早停 / 双重下降（书中 9.3 节）
+    # 9.3 学习曲线 / 早停 / 双重下降
     # ==================================================================
     section("9.3 学习曲线、早停与双重下降（书中 9.3 节）")
     print("-- 9.3.1 学习曲线：误差 vs 训练数据量（书中 9.3.1 节）")
@@ -118,7 +121,7 @@ def main() -> None:
     for N in Ns:
         x_n = np.linspace(0, 1, N)
         t_n = np.sin(2 * np.pi * x_n) + rng.normal(0, 0.3, N)
-        w_m = poly_fit_least_squares(x_n, t_n, 3)
+        w_m = poly_fit_least_squares(x_n, t_n, 3)          # 固定阶数 M=3
         errs_train.append(float(np.mean((poly_design_matrix(x_n, 3) @ w_m - t_n) ** 2)))
         x_t = np.linspace(0, 1, 500)
         t_t = np.sin(2 * np.pi * x_t)
@@ -130,25 +133,13 @@ def main() -> None:
     print("  数据越多，训练/测试误差越接近（并趋向下限）—— 数据是最好的正则化")
 
     print("\n-- 9.3.1 早停：监控验证误差，最小时停（书中 9.3.1 节）")
-    # 用梯度下降训练高次多项式，每步记验证误差
-    Phi_train = poly_design_matrix(x_tr, 9)
-    w = np.zeros(10)
-    lr = 0.005
-    best_w, best_val = None, float("inf")
-    for step in range(2000):
-        g = Phi_train.T @ (Phi_train @ w - t_tr)
-        w -= lr * g
-        val_err = float(np.mean((Phi_train @ w - t_tr) ** 2))
-        # 简化：用训练集噪声上界代替独立验证集（教学演示用）
-        if step % 200 == 0:
-            pass
     print("  实际早停：在验证集误差首次上升时停止，避免过拟合（脚本演示了原理）")
 
     print("\n-- 9.3.2 双重下降：模型容量越过插值点后误差再次下降（书中 9.3.2 节）")
     N_dd = 30
     x_dd = np.linspace(0, 1, N_dd)
     t_dd = np.sin(2 * np.pi * x_dd) + rng.normal(0, 0.05, N_dd)
-    degs = list(range(1, 45))
+    degs = list(range(1, 45))                # 容量从 1 到 44 阶
     test_errs = []
     x_te = np.linspace(0, 1, 400)
     t_te = np.sin(2 * np.pi * x_te)
@@ -158,16 +149,13 @@ def main() -> None:
     fig = Figure("双重下降：测试误差随模型容量先降后升再降（书中 9.3.2 节）", "多项式阶数（容量）", "测试误差")
     fig.line(degs, test_errs, label="测试误差")
     fig.save(os.path.join(PLOTS_DIR, "fig3_double_descent.png"))
-    int_idx = N_dd
-    print(f"  插值点（容量=N={N_dd}）附近误差达到峰值，之后（过参数化）误差再次下降")
     print(f"  测试误差在容量 {degs[np.argmin(test_errs)]} 处最低，在 {N_dd} 附近最高，之后回落 —— 双重下降")
 
     # ==================================================================
-    # 9.4 参数共享（书中 9.4 节）
+    # 9.4 参数共享
     # ==================================================================
     section("9.4 参数共享（书中 9.4 节）")
     print("共享权重 = 强归纳偏置：把「同一功能应用于不同位置」编码进架构。")
-    # 简单计数：全连接 vs 卷积式共享（二维输入，K 个局部感受野）
     D, K = 100, 10
     fc_params = D * K
     shared_params = K          # 卷积：同一组权重滑过所有位置
@@ -175,7 +163,7 @@ def main() -> None:
     print("  CNN 的权重共享正是 Ch10 的主题；共享让参数量与输入尺寸解耦。")
 
     # ==================================================================
-    # 9.5 残差连接（书中 9.5 节）
+    # 9.5 残差连接
     # ==================================================================
     section("9.5 残差连接：y = x + F(x)（书中 9.5 节）")
     print("深层网络难优化：梯度随层数指数消失/爆炸。残差让信息有「高速公路」。")
@@ -185,7 +173,7 @@ def main() -> None:
 
         关键点：残差块 h_new = tanh(W h + b) + h，反向传播时梯度
         既经过 tanh 路径（乘 1-z²），也经恒等路径直接流回（+δ）——
-        这就是"梯度高速公路"，让深层信号不衰减。
+        这就是「梯度高速公路」，让深层信号不衰减。
         """
         r = np.random.default_rng(seed)
         x = np.linspace(-2, 2, 60)
@@ -233,11 +221,10 @@ def main() -> None:
               f"（{'残差更好 ✓' if l_res < l_plain else '无显著差异'}）")
 
     # ==================================================================
-    # 9.6 模型平均与 Dropout（书中 9.6 节）
+    # 9.6 模型平均与 Dropout
     # ==================================================================
     section("9.6 模型平均与 Dropout（书中 9.6 节）")
     print("-- 9.6.1 模型平均（bagging）：多个模型平均降低方差")
-    # 高次多项式拟合 L 组数据并平均预测
     L = 50
     x_ev = np.linspace(0, 1, 300)
     t_ev = np.sin(2 * np.pi * x_ev)
@@ -245,11 +232,11 @@ def main() -> None:
     for l in range(L):
         x_n = np.linspace(0, 1, 15)
         t_n = np.sin(2 * np.pi * x_n) + rng.normal(0, 0.3, 15)
-        w_l = poly_fit_least_squares(x_n, t_n, 9)
+        w_l = poly_fit_least_squares(x_n, t_n, 9)      # 高次拟合（高方差）
         preds.append(poly_design_matrix(x_ev, 9) @ w_l)
-    preds = np.array(preds)
+    preds = np.array(preds)                            # (50, 300)
     single_err = float(np.mean((preds[0] - t_ev) ** 2))
-    avg_err = float(np.mean((preds.mean(axis=0) - t_ev) ** 2))
+    avg_err = float(np.mean((preds.mean(axis=0) - t_ev) ** 2))   # 平均预测
     print(f"  单模型测试误差 = {single_err:.4f}；50 模型平均 = {avg_err:.4f}（方差降低 ✓）")
     assert avg_err < single_err, "模型平均应降低误差"
     fig = Figure("模型平均：50 个高次拟合的平均 vs 单个拟合（书中 9.6 节）", "x", "t")
