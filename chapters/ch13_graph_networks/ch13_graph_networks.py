@@ -103,19 +103,23 @@ def main() -> None:
         return H1, logits
 
     for it in range(2000):
+        # ---- 前向：两层 GCN ----
         H1, logits = gcn_forward(X0, W1, W2)
+        # 只对"已知标签"的节点算交叉熵（半监督）
         lk = logits[known]
-        lk = lk - lk.max(axis=1, keepdims=True)
+        lk = lk - lk.max(axis=1, keepdims=True)   # 数值稳定
         exp = np.exp(lk)
         probs = exp / exp.sum(axis=1, keepdims=True)
         loss = float(-np.mean(np.log(probs[np.arange(len(known)), y_known] + 1e-12)))
+        # ---- 反向：关键在"消息传递的转置" ----
         dlogits_k = probs.copy()
-        dlogits_k[np.arange(len(known)), y_known] -= 1
+        dlogits_k[np.arange(len(known)), y_known] -= 1   # softmax 交叉熵梯度
         dlogits_k /= len(known)
-        # 未标注节点的输出梯度为 0，但消息传递会把梯度传播回它们
+        # 未标注节点的输出梯度为 0，但 dH = Âᵀ(dL/dH')
+        # 让梯度沿图结构"传播"到所有节点 —— 这就是标签扩散的数学机制
         dlogits = np.zeros((n, 2))
         dlogits[known] = dlogits_k
-        dH1 = A_hat.T @ (dlogits @ W2.T) * (1 - H1 ** 2)
+        dH1 = A_hat.T @ (dlogits @ W2.T) * (1 - H1 ** 2)   # 经消息传递 + tanh 导数
         dW2 = H1.T @ (A_hat.T @ dlogits)
         dW1 = X0.T @ (A_hat.T @ dH1)
         W1 -= 0.1 * dW1; W2 -= 0.1 * dW2

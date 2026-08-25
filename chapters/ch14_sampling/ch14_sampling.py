@@ -115,8 +115,11 @@ def main() -> None:
     z_cur = 0.0
     n_steps = 20000
     for t in range(n_steps):
-        z_star = z_cur + rng2.normal(0, 0.8)         # 高斯随机游走提议
+        # 1) 提议：从当前位置随机走一步（高斯随机游走）
+        z_star = z_cur + rng2.normal(0, 0.8)
+        # 2) 接受概率：min(1, p(z*)/p(z))（目标分布的比例，无需归一化常数！）
         alpha = min(1.0, target_1d(z_star) / target_1d(z_cur))
+        # 3) 掷骰子决定接受还是留在原地
         if rng2.random() < alpha:
             z_cur = z_star
         chain.append(z_cur)
